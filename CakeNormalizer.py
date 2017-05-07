@@ -1,5 +1,6 @@
 #!/usr/bin/python
 import os
+import platform
 from os import listdir
 from os.path import isfile, join
 
@@ -11,6 +12,7 @@ class NormalizeProject:
 	files          = ''
 	folderCount    = 0
 	fileCount      = 0
+	slash          = '/'
 
 	options = {
 		'm'   : 'models',
@@ -26,7 +28,7 @@ class NormalizeProject:
 	}
 
 	def __init__(self):
-		os.system('clear')
+		self.__start()
 		print("Welcome to file renaming tool")
 
 		cakePath         = raw_input("Provide path to project: ")
@@ -43,8 +45,15 @@ class NormalizeProject:
 		self.__delegateConvertion()
 		print('Completed renaming %d files and %d folders' % (self.fileCount, self.folderCount))
 
+	def __start(self):
+		if platform.system() != 'Linux':
+			self.slash = '\\'
+			return os.system('cls')
+
+		return os.system('clear')
+
 	def __resolvePath(self):
-		self.fullPath = self.projectPath + self.options[self.convertionType] + '/'
+		self.fullPath = self.projectPath + self.options[self.convertionType] + self.slash
 		self.folders  = [f for f in listdir(self.fullPath) if not isfile(join(self.fullPath, f))]
 		self.files    = [f for f in listdir(self.fullPath) if isfile(join(self.fullPath, f))]
 
@@ -80,7 +89,7 @@ class NormalizeProject:
 		print 'Converting files inside "%s" folder' % (self.options[self.convertionType])
 
 		print 'Converting files inside "helpers" of "%s" folder' % (self.options[self.convertionType])
-		folderPath   = self.fullPath + 'helpers' + '/'
+		folderPath   = self.fullPath + 'helpers' + self.slash
 		helperFolder = [f for f in listdir(folderPath) if isfile(join(folderPath, f))]
 		for oldHelperName in helperFolder:
 			self.fileCount += 1
@@ -116,7 +125,7 @@ class NormalizeProject:
 			os.rename((self.fullPath + oldFileName), (self.fullPath + newFileName))
 
 		for folderName in self.folders:
-			folderPath  = self.fullPath + folderName + '/'
+			folderPath  = self.fullPath + folderName + self.slash
 			folderFiles = [f for f in listdir(folderPath) if isfile(join(folderPath, f))]
 			self.folderCount += 1
 			print 'Converting files inside "%s" folder' % (folderName)
