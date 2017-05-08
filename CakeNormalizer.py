@@ -31,11 +31,11 @@ class NormalizeProject:
 		self.__start()
 		print("Welcome to file renaming tool")
 
-		cakePath         = raw_input("Provide path to project: ")
+		cakePath         = input("Provide path to project: ")
 		self.projectPath = cakePath
 
 	def convert(self):
-		convertType         = raw_input("What do you want to rename [M, V, C, All]: ")
+		convertType         = input("What do you want to rename [M, V, C, All]: ")
 		self.convertionType = convertType.lower()
 
 		return self
@@ -86,9 +86,9 @@ class NormalizeProject:
 		self.__run()
 
 	def __convertViews(self):
-		print 'Converting files inside "%s" folder' % (self.options[self.convertionType])
+		print ('Converting files inside "%s" folder' % (self.options[self.convertionType]))
 
-		print 'Converting files inside "helpers" of "%s" folder' % (self.options[self.convertionType])
+		print ('Converting files inside "helpers" of "%s" folder' % (self.options[self.convertionType]))
 		folderPath   = self.fullPath + 'helpers' + self.slash
 		helperFolder = [f for f in listdir(folderPath) if isfile(join(folderPath, f))]
 		for oldHelperName in helperFolder:
@@ -118,7 +118,7 @@ class NormalizeProject:
 		return textFile.replace(' ', '') + '.php'
 
 	def __run(self):
-		print 'Converting files inside "%s" folder' % (self.options[self.convertionType])
+		print ('Converting files inside "%s" folder' % (self.options[self.convertionType]))
 		for oldFileName in self.files:
 			self.fileCount += 1
 			newFileName = self.__camelize(oldFileName)
@@ -128,7 +128,7 @@ class NormalizeProject:
 			folderPath  = self.fullPath + folderName + self.slash
 			folderFiles = [f for f in listdir(folderPath) if isfile(join(folderPath, f))]
 			self.folderCount += 1
-			print 'Converting files inside "%s" folder' % (folderName)
+			print ('Converting files inside "%s" folder' % (folderName))
 			for oldFileName in folderFiles:
 				self.fileCount += 1
 				newFileName    = self.__camelize(oldFileName, folderName)
