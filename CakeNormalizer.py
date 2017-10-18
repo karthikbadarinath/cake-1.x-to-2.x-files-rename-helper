@@ -2,6 +2,7 @@
 import os
 import platform
 import shutil
+import fileinput
 from os import listdir
 from os.path import isfile, join
 
@@ -72,10 +73,25 @@ class NormalizeProject:
 		self.__resolvePath('v').__convertViews()
 
 	def __convertControllers(self):
-		self.__run('c')
+		def componentFixer(filename):
+			componentFolder = self.cake2Root + "app" + self.slash + "Controller" + self.slash + "Component" + self.slash
+			if componentFolder in filename:
+				self.__prepender("App::uses('Component', 'Controller');\n\n")(filename)
+				with fileinput.FileInput(filename, inplace=True) as file:
+					for line in file:
+						print(line.replace('extends Object', 'extends Component'), end = '')
+
+		self.__run('c', componentFixer)
 
 	def __convertModels(self):
-		self.__run('m', self.__prepender("namespace Saleswarp\Model;\n\n"))
+		def modelNamespacer(filename):
+			prefix = self.cake2Root + "app" + self.slash
+			prefixLen = len(prefix)
+			suffixLen = len(os.path.basename(filename))
+			namespace = filename[prefixLen:-suffixLen-1].replace(self.slash, '\\')
+			self.__prepender("namespace Saleswarp\\" + namespace + ";\n\n")(filename)
+
+		self.__run('m', modelNamespacer)
 
 	def __prepender(self, prependage):
 		def prepend(file):
@@ -117,7 +133,7 @@ class NormalizeProject:
 			folderFiles      = [f for f in listdir(cake1FolderPath) if isfile(join(cake1FolderPath, f))]
 			self.folderCount += 1
 			print ('Converting files inside "%s" folder' % (folderName))
-			self.__copyFiles(folderFiles, cake1FolderPath, cake2FolderPath, True, properFolderName)
+			self.__copyFiles(folderFiles, cake1FolderPath, cake2FolderPath, True, properFolderName, func)
 
 	def __copyFiles(self, files, cake1Folder, cake2Folder, camelize, appendage, function = None):
 		for oldFileName in files:
