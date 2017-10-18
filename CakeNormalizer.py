@@ -75,23 +75,22 @@ class NormalizeProject:
 		self.__run('c')
 
 	def __convertModels(self):
-		modelNamespacer = self.__namespacer('Saleswarp\Model')
-		self.__run('m', modelNamespacer)
+		self.__run('m', self.__prepender("namespace Saleswarp\Model;\n\n"))
 
-	def __namespacer(self, namespace):
-		def addNamespace(file):
+	def __prepender(self, prependage):
+		def prepend(file):
 			f = open(file, "r")
 			contents = f.readlines()
 			f.close()
 
-			contents.insert(1, 'namespace ' + namespace + ";\n\n")
+			contents.insert(1, prependage)
 
 			f = open(file, "w")
 			contents = "".join(contents)
 			f.write(contents)
 			f.close()
 
-		return addNamespace
+		return prepend
 
 	def __move(self, cake1Folder, cake2Folder, ensureRemoval):
 		self.folderCount += 1
