@@ -1,48 +1,43 @@
 #!/usr/bin/python
 import os
 import platform
+import shutil
 from os import listdir
 from os.path import isfile, join
 
 class NormalizeProject:
-	projectPath    = ''
-	convertionType = ''
-	fullPath       = ''
-	folders        = ''
-	files          = ''
-	folderCount    = 0
-	fileCount      = 0
-	slash          = '/'
+	cake1Path       = ''
+	cake1Root       = ''
+	cake1Subfolders = ''
+	cake2Path       = ''
+	cake2Root       = ''
+	files           = ''
+	folderCount     = 0
+	fileCount       = 0
+	slash           = '/'
 
-	options = {
+	cake1Folders = {
 		'm'   : 'models',
 		'v'   : 'views',
 		'c'   : 'controllers',
-		'all' : 'all',
 	}
 
-	postFix = {
-		'behaviors'  : 'behavior',
-		'components' : 'component',
-		'helpers'    : 'helper',
+	cake2Folders = {
+		'm'   : 'Model',
+		'v'   : 'View',
+		'c'   : 'Controller',
 	}
 
 	def __init__(self):
 		self.__start()
 		print("Welcome to file renaming tool")
 
-		cakePath         = input("Provide path to project: ")
-		self.projectPath = cakePath
-
-	def convert(self):
-		convertType         = input("What do you want to rename [M, V, C, All]: ")
-		self.convertionType = convertType.lower()
-
-		return self
+		self.cake1Root = input("Root path to CakePHP 1.x project: ")
+		self.cake2Root = input("Root path to CakePHP 2.x project: ")
 
 	def all(self):
-		print("Converting %s" % self.options[self.convertionType])
-		self.__delegateConvertion()
+		print("Converting all")
+		self.__delegateConversion()
 		print('Completed renaming %d files and %d folders' % (self.fileCount, self.folderCount))
 
 	def __start(self):
@@ -52,89 +47,153 @@ class NormalizeProject:
 
 		return os.system('clear')
 
-	def __resolvePath(self):
-		self.fullPath = self.projectPath + self.options[self.convertionType] + self.slash
-		self.folders  = [f for f in listdir(self.fullPath) if not isfile(join(self.fullPath, f))]
-		self.files    = [f for f in listdir(self.fullPath) if isfile(join(self.fullPath, f))]
+	def __resolvePath(self, conversionType):
+		self.cake1Path       = self.cake1Root + self.cake1Folders[conversionType] + self.slash
+		self.cake2Path       = self.cake2Root + "app" + self.slash + self.cake2Folders[conversionType] + self.slash
+		self.cake1Subfolders = [f for f in listdir(self.cake1Path) if not isfile(join(self.cake1Path, f))]
+		self.files           = [f for f in listdir(self.cake1Path) if isfile(join(self.cake1Path, f))]
 
 		return self
 
-	def __delegateConvertion(self):
-		if self.convertionType == 'c':
-			self.__resolvePath().__convertControllers()
-		elif self.convertionType == 'm':
-			self.__resolvePath().__convertModels()
-		elif self.convertionType == 'v':
-			self.__resolvePath().__convertViews()
-		else:
-			self.__convertAll()
+	def __delegateConversion(self):
+		# Controller
+		self.__resolvePath('c').__convertControllers()
 
-	def __convertAll(self):
-		self.convertionType = 'c'
-		self.__resolvePath().__convertControllers()
+		# Lib
+		self.__move('libs', 'Lib', True)
 
-		self.convertionType = 'm'
-		self.__resolvePath().__convertModels()
+		# Model
+		self.__resolvePath('m').__convertModels()
 
-		self.convertionType = 'v'
-		self.__resolvePath().__convertViews()
+		# Test
+		self.__move('tests', 'Test', True)
+
+		# View
+		self.__resolvePath('v').__convertViews()
 
 	def __convertControllers(self):
-		self.__run()
+		self.__run('c')
 
 	def __convertModels(self):
-		self.__run()
+		modelNamespacer = self.__namespacer('Saleswarp\Model')
+		self.__run('m', modelNamespacer)
 
-	def __convertViews(self):
-		print ('Converting files inside "%s" folder' % (self.options[self.convertionType]))
+	def __namespacer(self, namespace):
+		def addNamespace(file):
+			f = open(file, "r")
+			contents = f.readlines()
+			f.close()
 
-		print ('Converting files inside "helpers" of "%s" folder' % (self.options[self.convertionType]))
-		folderPath   = self.fullPath + 'helpers' + self.slash
-		helperFolder = [f for f in listdir(folderPath) if isfile(join(folderPath, f))]
-		for oldHelperName in helperFolder:
-			self.fileCount += 1
-			newHelperName  = self.__camelize(oldHelperName, 'helpers')
-			os.rename((folderPath + oldHelperName), (folderPath + newHelperName))
+			contents.insert(1, 'namespace ' + namespace + ";\n\n")
 
-		for oldFolderName in self.folders:
-			self.folderCount += 1
-			folderName       = self.__camelize(oldFolderName, oldFolderName)
-			newFolderName    = folderName.replace('.php', '')
-			os.rename((self.fullPath + oldFolderName), (self.fullPath + newFolderName))
+			f = open(file, "w")
+			contents = "".join(contents)
+			f.write(contents)
+			f.close()
 
-	def __camelize(self, fileName, folderName = ''):
-		splitedText = fileName.split('_')
-		textFile = ''
-		for name in splitedText:
-			if name.endswith('.php'):
-				name = name.replace('.php', '')
-				try:
-					name += ' ' +  self.postFix[folderName] # No way to handle undefined index :(
-				except:
-					name = name
+		return addNamespace
 
-			textFile += name.title() # title cases the letter after any special char, like ' ', '.' and so on
+	def __move(self, cake1Folder, cake2Folder, ensureRemoval):
+		self.folderCount += 1
+		print ('Moving "%s" folder' % cake1Folder)
 
-		return textFile.replace(' ', '') + '.php'
+		cake1Path = self.cake1Root + cake1Folder + self.slash
+		cake2Path = self.cake2Root + "app" + self.slash + cake2Folder + self.slash
+		if ensureRemoval == True:
+			try:
+				shutil.rmtree(cake2Path)
+			except:
+				pass
 
-	def __run(self):
-		print ('Converting files inside "%s" folder' % (self.options[self.convertionType]))
-		for oldFileName in self.files:
-			self.fileCount += 1
-			newFileName = self.__camelize(oldFileName)
-			os.rename((self.fullPath + oldFileName), (self.fullPath + newFileName))
+		shutil.copytree(cake1Path, cake2Path)
 
-		for folderName in self.folders:
-			folderPath  = self.fullPath + folderName + self.slash
-			folderFiles = [f for f in listdir(folderPath) if isfile(join(folderPath, f))]
+	def __run(self, conversionType, func = None):
+		print ('Converting files inside "%s" folder' % (self.cake1Folders[conversionType]))
+		self.__copyFiles(self.files, self.cake1Path, self.cake2Path, True, '', func)
+
+		for folderName in self.cake1Subfolders:
+			cake1FolderPath  = self.cake1Path + folderName + self.slash
+			properFolderName = self.__singularize(self.__camelizeFolder(folderName))
+			cake2FolderPath  = self.__ensureDir(self.cake2Path + properFolderName + self.slash)
+			folderFiles      = [f for f in listdir(cake1FolderPath) if isfile(join(cake1FolderPath, f))]
 			self.folderCount += 1
 			print ('Converting files inside "%s" folder' % (folderName))
-			for oldFileName in folderFiles:
-				self.fileCount += 1
-				newFileName    = self.__camelize(oldFileName, folderName)
-				os.rename((folderPath + oldFileName), (folderPath + newFileName))
+			self.__copyFiles(folderFiles, cake1FolderPath, cake2FolderPath, True, properFolderName)
+
+	def __copyFiles(self, files, cake1Folder, cake2Folder, camelize, appendage, function = None):
+		for oldFileName in files:
+			self.fileCount += 1
+			if camelize:
+				newFileName = self.__camelizeFile(oldFileName, appendage)
+			else:
+				newFileName = oldFileName
+			newFile = cake2Folder + newFileName
+			shutil.copy2((cake1Folder + oldFileName), newFile)
+			if function is not None:
+				function(newFile)
+
+	def __convertViews(self):
+		print ('Converting files inside "%s" folder' % (self.cake1Folders['v']))
+
+		print ('Converting files inside "helpers" of "%s" folder' % (self.cake1Folders['v']))
+		cake1FolderPath = self.cake1Path + 'helpers' + self.slash
+		cake2FolderPath = self.__ensureDir(self.cake2Path + 'Helper' + self.slash)
+		helperFiles     = [f for f in listdir(cake1FolderPath) if isfile(join(cake1FolderPath, f))]
+		self.__copyFiles(helperFiles, cake1FolderPath, cake2FolderPath, True, 'helpers')
+
+		for oldFolderName in self.cake1Subfolders:
+			if oldFolderName == "helpers": # was already handled above, specially
+				continue
+
+			self.folderCount += 1
+			newFolderName    = self.__camelizeFolder(oldFolderName)
+			try:
+				shutil.copytree((self.cake1Path + oldFolderName), (self.cake2Path + newFolderName))
+			except:
+				files = [f for f in listdir(self.cake1Path + oldFolderName) if isfile(join(self.cake1Path + oldFolderName, f))]
+				self.__copyFiles(files, self.cake1Path + oldFolderName + self.slash, self.cake2Path + newFolderName + self.slash, False, '')
+
+	def __camelizeFile(self, fileName, folderName = ''):
+		if fileName.endswith('.php'):
+			ext = '.php'
+		elif fileName.endswith('.ctp'):
+			ext = '.ctp'
+
+		splitedText = fileName.replace(ext, '').split('_')
+		textFile = ''
+		for name in splitedText:
+			textFile += name.title() # title cases the letter after any special char, like ' ', '.' and so on
+
+		try:
+			textFile += ' ' + self.__singularize(folderName) # No way to handle undefined index :(
+		except:
+			pass
+
+		return textFile.replace(' ', '') + ext
+
+	def __singularize(self, str):
+		if str[-1:] == 's':
+			str = str[:-1]
+		return str
+
+	def __camelizeFolder(self, folderName):
+		splitedText = folderName.split('_')
+		textFolder = ''
+		for name in splitedText:
+			textFolder += name.title() # title cases the letter after any special char, like ' ', '.' and so on
+
+		return textFolder.replace(' ', '')
+
+	def __ensureDir(self, dirName):
+		try:
+			os.mkdir(dirName)
+		except:
+			pass
+
+		return dirName
+
 
 try:
-	NormalizeProject().convert().all()
+	NormalizeProject().all()
 except (Exception, KeyboardInterrupt) as ex:
 	print("\nExecution stopped due to exception. \nError: %s" % str(ex))
