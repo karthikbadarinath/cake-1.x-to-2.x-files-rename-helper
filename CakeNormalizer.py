@@ -1,6 +1,7 @@
 #!/usr/bin/python
 import os
 import platform
+import re
 import shutil
 import fileinput
 from os import listdir
@@ -72,26 +73,45 @@ class NormalizeProject:
 		# View
 		self.__resolvePath('v').__convertViews()
 
+	def namespacer(self, filename):
+		prefix = self.cake2Root + "app" + self.slash
+		prefixLen = len(prefix)
+		suffixLen = len(os.path.basename(filename))
+		namespace = filename[prefixLen:-suffixLen-1].replace(self.slash, '\\')
+		self.__prepender("namespace Saleswarp\\" + namespace + ";\n\n")(filename)
+
+	def searchAndReplace(self, folder, filename, search, replace):
+		if folder in filename:
+			with fileinput.FileInput(filename, inplace=True) as file:
+				for line in file:
+					print(line.replace(search, replace), end = '')
+
 	def __convertControllers(self):
-		def componentFixer(filename):
+		def controllerNamespacerAndComponentFixer(filename):
 			componentFolder = self.cake2Root + "app" + self.slash + "Controller" + self.slash + "Component" + self.slash
 			if componentFolder in filename:
-				self.__prepender("App::uses('Component', 'Controller');\n\n")(filename)
+				self.__prepender("\App::uses('Component', 'Controller');\n\n")(filename)
 				with fileinput.FileInput(filename, inplace=True) as file:
 					for line in file:
-						print(line.replace('extends Object', 'extends Component'), end = '')
+						print(line.replace('extends Object', 'extends \Component'), end = '')
 
-		self.__run('c', componentFixer)
+			self.namespacer(filename)
+
+		self.__run('c', controllerNamespacerAndComponentFixer)
 
 	def __convertModels(self):
-		def modelNamespacer(filename):
-			prefix = self.cake2Root + "app" + self.slash
-			prefixLen = len(prefix)
-			suffixLen = len(os.path.basename(filename))
-			namespace = filename[prefixLen:-suffixLen-1].replace(self.slash, '\\')
-			self.__prepender("namespace Saleswarp\\" + namespace + ";\n\n")(filename)
+		def namespaceAssociations(filename):
+			with fileinput.FileInput(filename, inplace=True) as file:
+				for line in file:
+					print(re.sub(r"('className' *\=\> *)'([A-Za-z]+)',", r"\1\2::class,", line), end = '')
 
-		self.__run('m', modelNamespacer)
+		def fixModels(filename):
+			self.namespacer(filename)
+			behaviorFolder = self.cake2Root + "app" + self.slash + "Model" + self.slash + "Behavior" + self.slash
+			self.searchAndReplace(behaviorFolder, filename, 'extends ModelBehavior', 'extends \ModelBehavior')
+			namespaceAssociations(filename)
+
+		self.__run('m', fixModels)
 
 	def __prepender(self, prependage):
 		def prepend(file):
@@ -136,6 +156,9 @@ class NormalizeProject:
 			self.__copyFiles(folderFiles, cake1FolderPath, cake2FolderPath, True, properFolderName, func)
 
 	def __copyFiles(self, files, cake1Folder, cake2Folder, camelize, appendage, function = None):
+		if not os.path.exists(cake2Folder):
+			os.makedirs(cake2Folder)
+
 		for oldFileName in files:
 			self.fileCount += 1
 			if camelize:
