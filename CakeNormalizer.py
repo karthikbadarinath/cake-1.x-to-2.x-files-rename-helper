@@ -30,6 +30,12 @@ class NormalizeProject:
 		'c'   : 'Controller',
 	}
 
+	cake1AppFiles = {
+		'm'   : {'app_model.php'},
+		'v'   : {'app_helper.php'},
+		'c'   : {'app_controller.php'},
+	}
+
 	def __init__(self):
 		self.__start()
 		print("Welcome to file renaming tool")
@@ -146,6 +152,9 @@ class NormalizeProject:
 		print ('Converting files inside "%s" folder' % (self.cake1Folders[conversionType]))
 		self.__copyFiles(self.files, self.cake1Path, self.cake2Path, True, '', func)
 
+		# Move app classes
+		self.__copyFiles(self.cake1AppFiles[conversionType], self.cake1Root, self.cake2Path, True, '')
+
 		for folderName in self.cake1Subfolders:
 			cake1FolderPath  = self.cake1Path + folderName + self.slash
 			properFolderName = self.__singularize(self.__camelizeFolder(folderName))
@@ -179,6 +188,9 @@ class NormalizeProject:
 		helperFiles     = [f for f in listdir(cake1FolderPath) if isfile(join(cake1FolderPath, f))]
 		self.__copyFiles(helperFiles, cake1FolderPath, cake2FolderPath, True, 'helpers')
 
+		# Move app_helper
+		self.__copyFiles(self.cake1AppFiles['v'], self.cake1Root, cake2FolderPath, True, '')
+
 		for oldFolderName in self.cake1Subfolders:
 			if oldFolderName == "helpers": # was already handled above, specially
 				continue
@@ -203,7 +215,7 @@ class NormalizeProject:
 			textFile += name.title() # title cases the letter after any special char, like ' ', '.' and so on
 
 		try:
-			textFile += ' ' + self.__singularize(folderName) # No way to handle undefined index :(
+			textFile += ' ' + self.__singularize(folderName.title()) # No way to handle undefined index :(
 		except:
 			pass
 
