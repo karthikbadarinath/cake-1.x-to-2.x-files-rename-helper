@@ -6,6 +6,7 @@ import shutil
 import fileinput
 from os import listdir
 from os.path import isfile, join
+import sys, traceback
 
 class NormalizeProject:
 	cake1Path       = ''
@@ -17,6 +18,9 @@ class NormalizeProject:
 	folderCount     = 0
 	fileCount       = 0
 	slash           = '/'
+	cake1PluginName = ''
+	cake2PluginName = ''
+	appFolder       = ''
 
 	cake1Folders = {
 		'm'   : 'models',
@@ -31,10 +35,18 @@ class NormalizeProject:
 	}
 
 	cake1AppFiles = {
-		'm'   : {'app_model.php'},
-		'v'   : {'app_helper.php'},
-		'c'   : {'app_controller.php'},
+		'm'   : 'app_model.php',
+		'v'   : 'app_helper.php',
+		'c'   : 'app_controller.php',
 	}
+
+	plugins = [
+		'alertify',
+		'migrations',
+		'mocks',
+		'toolbelt',
+		'zendesk',
+	]
 
 	def __init__(self):
 		self.__start()
@@ -42,10 +54,13 @@ class NormalizeProject:
 
 		self.cake1Root = input("Root path to CakePHP 1.x project: ")
 		self.cake2Root = input("Root path to CakePHP 2.x project: ")
+		self.appFolder = "app" + self.slash
 
 	def all(self):
 		print("Converting all")
 		self.__delegateConversion()
+		print("Converting plugins")
+		self.__delegatepluginsConversion()
 		print('Completed renaming %d files and %d folders' % (self.fileCount, self.folderCount))
 
 	def __start(self):
@@ -57,9 +72,10 @@ class NormalizeProject:
 
 	def __resolvePath(self, conversionType):
 		self.cake1Path       = self.cake1Root + self.cake1Folders[conversionType] + self.slash
-		self.cake2Path       = self.cake2Root + "app" + self.slash + self.cake2Folders[conversionType] + self.slash
-		self.cake1Subfolders = [f for f in listdir(self.cake1Path) if not isfile(join(self.cake1Path, f))]
-		self.files           = [f for f in listdir(self.cake1Path) if isfile(join(self.cake1Path, f))]
+		self.cake2Path       = self.cake2Root + self.appFolder + self.cake2Folders[conversionType] + self.slash
+		if os.path.exists(self.cake1Path):
+			self.cake1Subfolders = [f for f in listdir(self.cake1Path) if not isfile(join(self.cake1Path, f))]
+			self.files           = [f for f in listdir(self.cake1Path) if isfile(join(self.cake1Path, f))]
 
 		return self
 
@@ -79,9 +95,55 @@ class NormalizeProject:
 		# View
 		self.__resolvePath('v').__convertViews()
 
+	def __delegatepluginsConversion(self):
+		for plugin in self.plugins:
+			self.cake1PluginName = plugin
+			self.cake2PluginName = self.__camelizeFolder(plugin)
+
+			# Change root paths to plugin paths
+			self.cake1Root = self.cake1Root + 'plugins' + self.slash + self.cake1PluginName + self.slash
+			self.cake2Root = self.cake2Root + self.appFolder + 'Plugin' + self.slash + self.cake2PluginName + self.slash
+
+			self.appFolder = '' # app Folder is already added into root path for plugins
+			self.__delegateConversion()
+
+			# Move remaining files and folders of plugin
+			if os.path.exists(self.cake1Root):
+				subFolders = [f for f in listdir(self.cake1Root) if not isfile(join(self.cake1Root, f))]
+				subFiles   = [f for f in listdir(self.cake1Root) if isfile(join(self.cake1Root, f))]
+
+				for folder in subFolders:
+					if folder in ['models', 'views', 'controllers', 'libs', 'tests']:
+						continue
+					self.folderCount += 1
+					self.__move(folder, folder, True)
+
+				for file in subFiles:
+					copyFile = True
+					for appIndex in self.cake1AppFiles:
+						pluginAppFile = self.cake1PluginName + '_' + self.cake1AppFiles[appIndex]
+						if file == pluginAppFile:
+							copyFile = False
+							break
+
+					if copyFile == True:
+						self.fileCount += 1
+						self.__copyFiles({file}, self.cake1Root, self.cake2Root, False, '')
+
+			# Reverting Root path
+			cake1PluginSuffixLength = len('plugins' + self.slash + self.cake1PluginName + self.slash)
+			self.cake1Root          = self.cake1Root[0:-cake1PluginSuffixLength]
+			cake2PluginSuffixLength = len(self.appFolder + 'Plugin' + self.slash + self.cake2PluginName + self.slash)
+			self.cake2Root          = self.cake2Root[0:-cake2PluginSuffixLength]
+
 	def namespacer(self, filename):
-		prefix = self.cake2Root + "app" + self.slash
-		prefixLen = len(prefix)
+		prefix = self.cake2Root + self.appFolder
+
+		if self.cake2PluginName == '':
+			prefixLen = len(prefix)
+		else:
+			prefixLen = len(prefix) - len(self.cake2PluginName + self.slash)
+
 		suffixLen = len(os.path.basename(filename))
 		namespace = filename[prefixLen:-suffixLen-1].replace(self.slash, '\\')
 		self.__prepender("namespace Saleswarp\\" + namespace + ";\n\n")(filename)
@@ -94,7 +156,7 @@ class NormalizeProject:
 
 	def __convertControllers(self):
 		def controllerNamespacerAndComponentFixer(filename):
-			componentFolder = self.cake2Root + "app" + self.slash + "Controller" + self.slash + "Component" + self.slash
+			componentFolder = self.cake2Root + self.appFolder + "Controller" + self.slash + "Component" + self.slash
 			if componentFolder in filename:
 				self.__prepender("\App::uses('Component', 'Controller');\n\n")(filename)
 				with fileinput.FileInput(filename, inplace=True) as file:
@@ -113,7 +175,7 @@ class NormalizeProject:
 
 		def fixModels(filename):
 			self.namespacer(filename)
-			behaviorFolder = self.cake2Root + "app" + self.slash + "Model" + self.slash + "Behavior" + self.slash
+			behaviorFolder = self.cake2Root + self.appFolder + "Model" + self.slash + "Behavior" + self.slash
 			self.searchAndReplace(behaviorFolder, filename, 'extends ModelBehavior', 'extends \ModelBehavior')
 			namespaceAssociations(filename)
 
@@ -135,25 +197,36 @@ class NormalizeProject:
 		return prepend
 
 	def __move(self, cake1Folder, cake2Folder, ensureRemoval):
-		self.folderCount += 1
-		print ('Moving "%s" folder' % cake1Folder)
 
 		cake1Path = self.cake1Root + cake1Folder + self.slash
-		cake2Path = self.cake2Root + "app" + self.slash + cake2Folder + self.slash
-		if ensureRemoval == True:
-			try:
-				shutil.rmtree(cake2Path)
-			except:
-				pass
+		cake2Path = self.cake2Root + self.appFolder + cake2Folder + self.slash
 
-		shutil.copytree(cake1Path, cake2Path)
+		if os.path.exists(cake1Path):
+			self.folderCount += 1
+			print ('Moving "%s" folder' % cake1Folder)
+
+			if ensureRemoval == True:
+				try:
+					shutil.rmtree(cake2Path)
+				except:
+					pass
+
+			shutil.copytree(cake1Path, cake2Path)
 
 	def __run(self, conversionType, func = None):
+		if not os.path.exists(self.cake1Path):
+			return
 		print ('Converting files inside "%s" folder' % (self.cake1Folders[conversionType]))
 		self.__copyFiles(self.files, self.cake1Path, self.cake2Path, True, '', func)
 
 		# Move app classes
-		self.__copyFiles(self.cake1AppFiles[conversionType], self.cake1Root, self.cake2Path, True, '')
+		appFileName = self.cake1AppFiles[conversionType]
+		if self.cake1PluginName is not '':
+			appFileName = self.cake1PluginName + '_' + appFileName
+
+		if os.path.exists(self.cake1Root + appFileName):
+			self.__copyFiles({appFileName}, self.cake1Root, self.cake2Path, True, '')
+			self.namespacer(self.cake2Path + self.__camelizeFile(appFileName))
 
 		for folderName in self.cake1Subfolders:
 			cake1FolderPath  = self.cake1Path + folderName + self.slash
@@ -180,16 +253,28 @@ class NormalizeProject:
 				function(newFile)
 
 	def __convertViews(self):
+		if not os.path.exists(self.cake1Path):
+			return
 		print ('Converting files inside "%s" folder' % (self.cake1Folders['v']))
 
 		print ('Converting files inside "helpers" of "%s" folder' % (self.cake1Folders['v']))
 		cake1FolderPath = self.cake1Path + 'helpers' + self.slash
-		cake2FolderPath = self.__ensureDir(self.cake2Path + 'Helper' + self.slash)
-		helperFiles     = [f for f in listdir(cake1FolderPath) if isfile(join(cake1FolderPath, f))]
-		self.__copyFiles(helperFiles, cake1FolderPath, cake2FolderPath, True, 'helpers')
+		if os.path.exists(cake1FolderPath):
+			cake2FolderPath = self.__ensureDir(self.cake2Path + 'Helper' + self.slash)
+			helperFiles     = [f for f in listdir(cake1FolderPath) if isfile(join(cake1FolderPath, f))]
+			self.__copyFiles(helperFiles, cake1FolderPath, cake2FolderPath, True, 'helpers')
+
+			for helperFile in helperFiles:
+				self.namespacer(cake2FolderPath + self.__camelizeFile(helperFile, 'helpers'))
 
 		# Move app_helper
-		self.__copyFiles(self.cake1AppFiles['v'], self.cake1Root, cake2FolderPath, True, '')
+		appFileName = self.cake1AppFiles['v']
+		if self.cake1PluginName != '':
+			appFileName = self.cake1PluginName + '_' + self.cake1AppFiles['v']
+
+		if os.path.exists(self.cake1Root + appFileName):
+			self.__copyFiles({appFileName}, self.cake1Root, cake2FolderPath, True, '')
+			self.namespacer(cake2FolderPath + self.__camelizeFile(appFileName))
 
 		for oldFolderName in self.cake1Subfolders:
 			if oldFolderName == "helpers": # was already handled above, specially
@@ -247,3 +332,5 @@ try:
 	NormalizeProject().all()
 except (Exception, KeyboardInterrupt) as ex:
 	print("\nExecution stopped due to exception. \nError: %s" % str(ex))
+	exc_type, exc_value, exc_traceback = sys.exc_info()
+	traceback.print_tb(exc_traceback, limit=10, file=sys.stdout)
