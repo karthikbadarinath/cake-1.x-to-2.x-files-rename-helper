@@ -64,7 +64,7 @@ class NormalizeProject:
 		print('Completed renaming %d files and %d folders' % (self.fileCount, self.folderCount))
 
 	def __start(self):
-		if platform.system() != 'Linux':
+		if platform.system() != 'Linux' and platform.system() != 'Darwin':
 			self.slash = '\\'
 			return os.system('cls')
 
